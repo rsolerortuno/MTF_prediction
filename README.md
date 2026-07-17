@@ -1,373 +1,321 @@
-# MTF_prediction
+[![License: CC BY 4.0](https://img.shields.io/badge/License-CC%20BY%204.0-lightgrey.svg)](LICENSE-CC-BY)
+[![Python](https://img.shields.io/badge/Python-PyTorch-blue.svg)](tf_running_captum.py)
+[![Analysis status](https://img.shields.io/badge/status-research%20analysis-orange.svg)](#limitations)
 
-Here is the code used to perform the analysis of the paper. Inside the folders you can find the _awk_ files to obtain the proper transmembrane domain. Also, _tf_running_captum.py_ is the python modify version to obtain Captum interpretation.
+**Topology-aware deep-learning screening of mammalian membrane-protein domains for transcription-factor-like sequence features.**
 
-<img src="https://github.com/Rafaelsoler13/MTF_prediction/blob/main/Figure_1.png">
+This repository contains the code, processed inputs, intermediate files, and prediction outputs generated for the analysis **“Prediction of novel mammalian membrane transcription factors using deep learning.”**
 
-### UniProtKB 2022_05 Version Used
+The workflow uses reviewed human and mouse membrane proteins from **UniProtKB 2022_05**, separates their annotated **cytoplasmic, extracellular, and lumenal domains**, and evaluates alternative domain boundaries containing no, half, or all of the adjacent transmembrane domain. The resulting protein fragments are classified with [DeepTFactor](https://bitbucket.org/kaistsystemsbiology/deeptfactor), while selected predictions are interpreted at amino-acid resolution with [Captum Integrated Gradients](https://captum.ai/api/integrated_gradients.html).
 
-#MEMBRANE PROTEINS
+> **Repository scope:** this is a research-analysis archive rather than a packaged command-line application. It preserves the original data organization and commands needed to understand or reproduce the analysis.
 
-`
-(organism_id:9606) AND (reviewed:true) AND (keyword:KW-0472) #human -> 7663
-`
+![Topology-aware extraction of membrane-protein domains](Figure_1.png)
 
-`
-(organism_id:10090) AND (reviewed:true) AND (keyword:KW-0472) #mouse -> 6527
-`
+## Scientific question
 
-## FOR CYTOPLASMIC
+The analysis asks two related questions:
 
-#### Filter search from UniProt
-`
-(organism_id:9606) AND (reviewed:true) AND (ft_topo_dom:cytoplasmic) #human
-`
+1. Which annotated domains of reviewed mammalian membrane proteins contain sequence patterns classified as transcription-factor-like by DeepTFactor?
+2. How sensitive are those predictions to the amount of the adjacent transmembrane domain included in the input sequence?
 
-`
-(organism_id:10090) AND (reviewed:true) AND (ft_topo_dom:cytoplasmic) #mouse
-`
+To test the second question, each eligible topological domain was assessed under three sequence-boundary conditions:
 
-#Download data GFF from UniProt
+| Condition | Repository naming | Sequence submitted to DeepTFactor |
+|---|---|---|
+| No TMD | `*_no_transmembrane` or the unmodified domain folder | Annotated topological domain only |
+| Half TMD | `*_transmembrane_+12` | Domain extended by approximately half of each adjacent annotated TMD |
+| Full TMD | `*_full_transmembrane` or `*_extracellular_full` / `*_lumenal_full` | Domain extended across the complete adjacent annotated TMD |
 
-#### Filter to obtain only Cytoplasmic domains
+For multi-pass proteins, the AWK scripts generate the corresponding combinations for domains flanked by two transmembrane segments.
 
-`
+## Data source
+
+The original analysis used **UniProtKB release 2022_05**.
+
+Reviewed membrane-protein queries:
+
+```text
+(organism_id:9606) AND (reviewed:true) AND (keyword:KW-0472)   # human: 7,663 proteins
+(organism_id:10090) AND (reviewed:true) AND (keyword:KW-0472)  # mouse: 6,527 proteins
+```
+
+Topology-specific queries:
+
+```text
+# Cytoplasmic domains
+(organism_id:9606) AND (reviewed:true) AND (ft_topo_dom:cytoplasmic)
+(organism_id:10090) AND (reviewed:true) AND (ft_topo_dom:cytoplasmic)
+
+# Extracellular domains
+(organism_id:9606) AND (reviewed:true) AND (ft_topo_dom:extracellular)
+(organism_id:10090) AND (reviewed:true) AND (ft_topo_dom:extracellular)
+
+# Lumenal domains
+(organism_id:9606) AND (reviewed:true) AND (ft_topo_dom:lumenal)
+(organism_id:10090) AND (reviewed:true) AND (ft_topo_dom:lumenal)
+```
+
+The GFF topology annotations were downloaded from UniProtKB, processed with `grep` and the domain-specific AWK scripts, and converted into coordinate-aware UniProt identifiers for sequence retrieval.
+
+## Analysis workflow
+
+```mermaid
+flowchart LR
+    A[Reviewed human and mouse membrane proteins<br/>UniProtKB 2022_05] --> B[GFF topology annotations]
+    B --> C{Topological domain}
+    C --> D[Cytoplasmic]
+    C --> E[Extracellular]
+    C --> F[Lumenal]
+    D --> G{Boundary condition}
+    E --> G
+    F --> G
+    G --> H[No TMD]
+    G --> I[Half TMD]
+    G --> J[Full TMD]
+    H --> K[Coordinate-aware FASTA retrieval]
+    I --> K
+    J --> K
+    K --> L[DeepTFactor inference]
+    L --> M[Prediction score and candidate filtering]
+    M --> N[UniProt identifier and gene-name mapping]
+    M --> O[Captum Integrated Gradients<br/>selected proteins]
+```
+
+## Repository structure
+
+```text
+MTF_prediction/
+├── cytoplasmic/
+│   ├── human_no_transmembrane/
+│   ├── human_transmembrane_+12/
+│   ├── human_full_transmembrane/
+│   ├── mouse_no_transmembrane/
+│   ├── mouse_transmembrane_+12/
+│   └── mouse_full_transmembrane/
+├── extracellular/
+│   ├── human_extracellular/
+│   ├── human_extracellular_+12/
+│   ├── human_extracellular_full/
+│   ├── mouse_extracellular/
+│   ├── mouse_extracellular_+12/
+│   └── mouse_extracellular_full/
+├── lumenal/
+│   ├── human_lumenal/
+│   ├── human_lumenal_+12/
+│   ├── human_lumenal_full/
+│   ├── mouse_lumenal/
+│   ├── mouse_lumenal_+12/
+│   └── mouse_lumenal_full/
+├── result_captum/
+│   ├── result_ATF6A/
+│   ├── result_ATF6B/
+│   ├── result_CREB3/
+│   ├── result_JPH2/
+│   ├── result_MYRF/
+│   ├── result_PLSCR1/
+│   ├── result_PLSCR2/
+│   ├── result_SREBF1/
+│   ├── result_SREBF2/
+│   └── result_XBP1/
+├── tf_running_captum.py
+├── workflow.txt
+├── Figure_1.png
+├── CITATION.cff
+└── LICENSE-CC-BY
+```
+
+Each organism/domain/condition directory contains the relevant inputs, coordinate transformations, sequence files, and prediction outputs.
+
+## File conventions
+
+| File pattern | Role |
+|---|---|
+| `*.gff` | UniProtKB topology annotations used as the primary input |
+| `*_filtered.gff` | Selected topological domains, optionally extended into adjacent TMDs |
+| `*_filtered_IDs.csv` | UniProt accessions with residue coordinates for sequence retrieval |
+| `*.fasta` | Protein fragments submitted to DeepTFactor |
+| `half_*.awk` | Extends a domain by half of each adjacent TMD |
+| `full_*.awk` | Extends a domain across each complete adjacent TMD |
+| `result/prediction_result.txt` | DeepTFactor classification and score for every sequence |
+| `*_true.csv` | Positively classified fragments, generally sorted by score |
+| `uniprot_names.csv` | Accessions prepared for UniProt ID mapping or gene-name retrieval |
+| `*.ods` | Manually inspected or curated result tables |
+| `result_captum/table_*.csv` | Residue-level Integrated Gradients attribution values |
+| `result_captum/fig2_*.png` | Sequence-logo visualization of attribution values |
+
+## Requirements
+
+The original analysis depends on:
+
+- Linux or another Unix-like environment
+- GNU `awk`, `grep`, `sort`, and `cut`
+- Conda or Miniconda
+- [DeepTFactor](https://bitbucket.org/kaistsystemsbiology/deeptfactor)
+- Python with:
+  - PyTorch
+  - NumPy
+  - pandas
+  - Captum
+  - Logomaker
+  - Matplotlib / `pylab`
+
+DeepTFactor supplies the model implementation, argument parser, data loader, and trained checkpoint expected by `tf_running_captum.py`.
+
+The repository does not currently provide a locked environment file. For the closest reproduction of the original analysis, create the environment supplied by the DeepTFactor project and then add the interpretation dependencies:
+
+```bash
+git clone https://bitbucket.org/kaistsystemsbiology/deeptfactor.git
+cd deeptfactor
+
+conda env create -f environment.yml
+conda activate deeptfactor
+
+python -m pip install captum pandas numpy logomaker matplotlib
+```
+
+Use PyTorch and CUDA versions compatible with the selected DeepTFactor environment and your hardware.
+
+## Reproducing the analysis
+
+### 1. Download topology annotations
+
+Run the relevant UniProtKB query, export the results in **GFF** format, and save the file in the appropriate organism/domain/condition directory.
+
+Example for cytoplasmic annotations:
+
+```bash
 grep "Cytoplasmic" cytoplasmic.gff > cytoplasmic_filtered.gff
-`
+```
 
-#### AWK to adapt to UniProt format
+### 2. Generate alternative domain boundaries
 
-`
-awk -F "\t" '{print $1"["$4"-"$5"]"}' cytoplasmic_filtered.gff > cytoplasmic_filtered_IDs.csv
-`
+For the half-TMD condition:
 
-#Download fasta with these coords with "Retrieve/ID mapping", from "UniProtKB AC/ID" to "UniProtKB", format: FASTA (saurce list)
-
-#### Run DeepTFactor
-
-`
-conda activate deeptfactor
-`
-`
-python tf_running.py -i ~/cytoplasmic.fasta -g cuda -o ~/result
-`
-
-#### Filter the positive results
-
-`
-grep "True" prediction_result.txt | sort -rn -k3 > cytoplasmic_true.csv 
-`
-
-#### Extract UniProtKB AC/IDs to download GeneNames with "Retrieve/ID mapping"
-
-`
-awk '{print $1}' cytoplasmic_true.csv | cut -c 4- | cut -f1 -d"|" > uniprot_names.csv
-`
-
-----------------
-
-
-### Same but substract half of the TMD
-
-`
+```bash
 awk -f half_cytoplasmic.awk cytoplasmic.gff > cytoplasmic_filtered.gff
-`
+```
 
-`
-awk -F "\t" '{print $1"["$4"-"$5"]"}' cytoplasmic_filtered.gff > cytoplasmic_filtered_IDs.csv
-`
+For the full-TMD condition:
 
-`
-python tf_running.py -i ~/cytoplasmic.fasta -g cuda -o ~/result
-`
-
-`
-grep "True" prediction_result.txt | sort -rn -k3 > all_cytoplasmic_true.csv 
-`
-
-`
-awk '{print $1}' all_cytoplasmic_true.csv | cut -c 4- | cut -f1 -d"|" > uniprot_names.csv
-`
-
-#Manually eliminate the duplicates keeping the highest score
-
-----------------
-
-
-### Same but substract full TMD
-
-`
+```bash
 awk -f full_cytoplasmic.awk cytoplasmic.gff > cytoplasmic_filtered.gff
-`
+```
 
-`
-awk -F "\t" '{print $1"["$4"-"$5"]"}' cytoplasmic_filtered.gff > cytoplasmic_filtered_IDs.csv
-`
+Equivalent scripts are provided for extracellular and lumenal domains.
 
-`
-python tf_running.py -i ~cytoplasmic.fasta -g cuda -o ~/result
-`
+### 3. Create coordinate-aware identifiers
 
-`
-grep "True" prediction_result.txt | sort -rn -k3 > all_cytoplasmic_true.csv 
-`
+```bash
+awk -F "\t" '{print $1"["$4"-"$5"]"}' \
+  cytoplasmic_filtered.gff \
+  > cytoplasmic_filtered_IDs.csv
+```
 
-`
-awk '{print $1}' all_cytoplasmic_true.csv | cut -c 4- | cut -f1 -d"|" > uniprot_names.csv
-`
+Use the resulting accessions and coordinates with UniProt **Retrieve/ID mapping** to download the corresponding fragments in FASTA format.
 
-#Manually eliminate the duplicates keeping the highest score
+### 4. Run DeepTFactor
 
-----------------
-----------------
+From an activated DeepTFactor environment:
 
-## FOR EXTRACELLULAR
+```bash
+python /path/to/deeptfactor/tf_running.py \
+  -i cytoplasmic.fasta \
+  -g cuda \
+  -o result
+```
 
-#### Filter search from UniProt
+Use `cpu` instead of `cuda` when a compatible GPU is unavailable.
 
-`
-(organism_id:9606) AND (reviewed:true) AND (ft_topo_dom:extracellular) #human
-`
+DeepTFactor writes:
 
-`
-(organism_id:10090) AND (reviewed:true) AND (ft_topo_dom:extracellular) #mouse
-`
+```text
+sequence_ID    prediction    score
+```
 
-#### Filter to obtain only Extracellular domains
+The prediction threshold used by the accompanying script is **0.5**.
 
-`
-grep "Extracellular" extracellular.gff > extracellular_filtered.gff
-`
+### 5. Extract positive predictions
 
-#### AWK to adapt to UniProt format
+```bash
+{
+  head -n 1 result/prediction_result.txt
+  grep -P '\tTrue\t' result/prediction_result.txt \
+    | sort -t $'\t' -k3,3nr
+} > result/cytoplasmic_true.csv
+```
 
-`
-awk -F "\t" '{print $1"["$4"-"$5"]"}' extracellular_filtered.gff > extracellular_filtered_IDs.csv
-`
+The UniProt accessions can then be prepared for ID mapping:
 
-#Download fasta with these coords with "Retrieve/ID mapping", from "UniProtKB AC/ID" to "UniProtKB", format: FASTA (saurce list)
+```bash
+awk 'NR > 1 {print $1}' result/cytoplasmic_true.csv \
+  | cut -c 4- \
+  | cut -f1 -d"|" \
+  > result/uniprot_names.csv
+```
 
-#### Run DeepTFactor
+### 6. Calculate Integrated Gradients
 
-`
-conda activate deeptfactor
-`
+`tf_running_captum.py` extends the DeepTFactor inference script with Captum Integrated Gradients. It writes the standard prediction table to the selected output directory and produces residue-attribution tables and sequence-logo figures in the current working directory.
 
-`
-python tf_running.py -i ~/extracellular.fasta -g cuda -o ~/result
-`
+Run it from the directory where the interpretation files should be created:
 
-#### Filter the positive results
+```bash
+mkdir -p result_captum/result_EXAMPLE
+cd result_captum/result_EXAMPLE
 
-`
-grep "True" prediction_result.txt | sort -rn -k3 > extracellular_true.csv 
-`
+python ../../tf_running_captum.py \
+  -i /path/to/EXAMPLE.fasta \
+  -g cpu \
+  -o .
+```
 
-#### Extract UniProtKB AC/IDs to download GeneNames with "Retrieve/ID mapping"
+Expected interpretation outputs include:
 
-`
-awk '{print $1}' extracellular_true.csv | cut -c 4- | cut -f1 -d"|" > uniprot_names.csv
-`
+```text
+prediction_result.txt
+table_0.csv
+fig2_0.png
+```
 
-----------------
+For FASTA files containing several sequences, the numeric suffix identifies the sequence order in the input file.
 
+## Interpretation of the outputs
 
-### Same but substract half of the TMD
+A positive DeepTFactor result indicates that the submitted protein fragment contains sequence features that the model associates with transcription factors. It should be treated as a **candidate-generating prediction**, not as evidence that the full membrane protein functions as a transcription factor in vivo.
 
-`
-awk -f half_extracellular.awk extracellular.gff > extracellular_filtered.gff
-`
+The Integrated Gradients outputs provide model-attribution scores for amino-acid identities at each sequence position. They can help identify which residues or regions influenced a prediction, but they do not independently establish a DNA-binding domain, nuclear localization, proteolytic activation mechanism, or transcriptional function.
 
-`
-awk -F "\t" '{print $1"["$4"-"$5"]"}' extracellular_filtered.gff > extracellular_filtered_IDs.csv
-`
+## Limitations
 
-`
-python tf_running.py -i ~/extracellular.fasta -g cuda -o ~/result
-`
+- Predictions are computational hypotheses and require orthogonal biological validation.
+- Results are tied to **UniProtKB 2022_05**, the selected DeepTFactor checkpoint, and the preprocessing rules used here.
+- The prediction cutoff is fixed at `0.5` in `tf_running_captum.py`.
+- Protein fragments longer than **1,000 amino acids** were excluded in the original workflow because of the model/input limitation used at the time.
+- Some identifiers containing non-standard amino-acid symbols were inspected separately.
+- UniProt sequence retrieval, gene-name mapping, and duplicate resolution include manual steps.
+- The repository does not yet include an automated end-to-end workflow, dependency lock file, continuous integration, or regression tests.
+- The original DeepTFactor model was developed for general transcription-factor prediction; performance on isolated mammalian membrane-protein domains should therefore be interpreted cautiously.
 
-`
-grep "True" prediction_result.txt | sort -rn -k3 > extracellular_true.csv 
-`
+## Citation
 
-`
-awk '{print $1}' extracellular_true.csv | cut -c 4- | cut -f1 -d"|" > uniprot_names.csv
-`
+When using this repository, cite:
 
-#Manually eliminate the duplicates keeping the highest score
+> Soler, R., and Borrell, V. (2023). *Prediction of novel mammalian membrane transcription factors using deep learning* [Software]. GitHub: https://github.com/rsolerortuno/MTF_prediction
 
+The repository also includes a machine-readable [`CITATION.cff`](CITATION.cff) file.
 
-----------------
+Please also cite DeepTFactor:
 
+> Kim, G. B., Gao, Y., Palsson, B. O., and Lee, S. Y. (2021). DeepTFactor: A deep learning-based tool for the prediction of transcription factors. *Proceedings of the National Academy of Sciences*, 118(2), e2021171118. https://doi.org/10.1073/pnas.2021171118
 
-### Same but substract full TMD
+For model interpretation, cite Captum and/or the Integrated Gradients method as appropriate.
 
-`
-awk -f full_extracellular.awk extracellular.gff > extracellular_filtered.gff
-`
+## Authors
 
-`
-awk -F "\t" '{print $1"["$4"-"$5"]"}' extracellular_filtered.gff > extracellular_filtered_IDs.csv
-`
+- **Rafael Soler** — [ORCID: 0000-0003-1245-5734](https://orcid.org/0000-0003-1245-5734)
+- **Víctor Borrell** — [ORCID: 0000-0002-7833-3978](https://orcid.org/0000-0002-7833-3978)
 
-`
-python tf_running.py -i ~/extracellular.fasta -g cuda -o ~/result
-`
+## License
 
-`
-cd /home/victor/deeptfactor/2022_analysis_final/extracellular/human_extracellular_full/result
-`
-
-`
-grep "True" prediction_result.txt | sort -rn -k3 > extracellular_true.csv 
-`
-
-`
-awk '{print $1}' extracellular_true.csv | cut -c 4- | cut -f1 -d"|" > uniprot_names.csv
-`
-
-#Manually eliminate the duplicates keeping the highest score
-
--------------
--------------
-
-# FOR LUMENAL
-
-#### Filter search from UniProt
-
-`
-(organism_id:9606) AND (reviewed:true) AND (ft_topo_dom:lumenal) #human
-`
-
-`
-(organism_id:10090) AND (reviewed:true) AND (ft_topo_dom:lumenal) #mouse
-`
-
-#### Filter to obtain only Lumenal domains
-
-`
-grep "Lumenal" lumenal.gff > lumenal_filtered.gff
-`
-
-#### AWK to adapt to UniProt format
-
-`
-awk -F "\t" '{print $1"["$4"-"$5"]"}' lumenal_filtered.gff > lumenal_filtered_IDs.csv
-`
-
-#Download fasta with these coords with "Retrieve/ID mapping", from "UniProtKB AC/ID" to "UniProtKB", format: FASTA (saurce list)
-#### Run DeepTFactor
-
-`
-conda activate deeptfactor
-`
-
-`
-python tf_running.py -i ~/lumenal.fasta -g cuda -o ~/result
-`
-
-
-#### Filter the positive results
-
-`
-grep "True" prediction_result.txt | sort -rn -k3 > lumenal_true.csv 
-`
-
-#### Extract UniProtKB AC/IDs to download GeneNames with "Retrieve/ID mapping"
-
-`
-awk '{print $1}' lumenal_true.csv | cut -c 4- | cut -f1 -d"|" > uniprot_names.csv
-`
-
--------------
-
-
-### Same but substract half of the TMD
-
-`
-awk -f half_lumenal.awk lumenal.gff > lumenal_filtered.gff
-`
-
-`
-awk -F "\t" '{print $1"["$4"-"$5"]"}' lumenal_filtered.gff > lumenal_filtered_IDs.csv
-`
-
-`
-python tf_running.py -i ~/lumenal.fasta -g cuda -o ~/result
-`
-
-`
-grep "True" prediction_result.txt | sort -rn -k3 > lumenal_true.csv 
-`
-
-
-`
-awk '{print $1}' lumenal_true.csv | cut -c 4- | cut -f1 -d"|" > uniprot_names.csv
-`
-
--------------
-
-### Same but substract full TMD
-
-`
-awk -f full_lumenal.awk lumenal.gff > lumenal_filtered.gff
-`
-
-`
-awk -F "\t" '{print $1"["$4"-"$5"]"}' lumenal_filtered.gff > lumenal_filtered_IDs.csv
-`
-
-`
-python tf_running.py -i ~/lumenal.fasta -g cuda -o ~/result
-`
-
-`
-grep "True" prediction_result.txt | sort -rn -k3 > lumenal_true.csv 
-`
-
-`
-awk '{print $1}' lumenal_true.csv | cut -c 4- | cut -f1 -d"|" > uniprot_names.csv
-`
-
-#Manually eliminate the duplicates keeping the highest score
-
-**#Domains greater than 1000 amino acids were not analyzed due to the limitation of the tool.**
-
--------------
--------------
-
-#### Check errors (Proteins with "U" aas)
-
-`
-grep -hv "^>" extracellular.fasta > error.fasta
-`
-
-`
-grep "U" error.fasta
-`
-
-#### Use of Integrated Gradients
-
-`
-python tf_running_captum.py -i ATF6A.fasta -g cuda -o ./results_captum
-`
-
------------------
------------------
-
-# Citation
-
-Please be advised that if you choose to utilize this software for any academic publication or other purposes, it is strongly recommended that you provide appropriate attribution.
-
-[![DOI](https://zenodo.org/badge/523395975.svg)](https://zenodo.org/badge/latestdoi/523395975)
-
-Shield: [![CC BY 4.0][cc-by-shield]][cc-by]
-
-This work is licensed under a
-[Creative Commons Attribution 4.0 International License][cc-by].
-
-[![CC BY 4.0][cc-by-image]][cc-by]
-
-[cc-by]: http://creativecommons.org/licenses/by/4.0/
-[cc-by-image]: https://i.creativecommons.org/l/by/4.0/88x31.png
-[cc-by-shield]: https://img.shields.io/badge/License-CC%20BY%204.0-lightgrey.svg
+This work is distributed under the [Creative Commons Attribution 4.0 International License](LICENSE-CC-BY).
